@@ -9,7 +9,7 @@
 -module(pollution).
 -author("michalinahytrek").
 
--export([create_monitor/0, add_station/3, add_value/5, remove_value/4, look_for_station/2, get_one_value/4]).
+-export([create_monitor/0, add_station/3, add_value/5, remove_value/4, look_for_station/2, get_one_value/4, get_station_mean/3, get_daily_mean/3]).
 
 -record(station, {name, coordinates}).
 -record(measurement, {station_name, time, type, result}).
@@ -20,6 +20,7 @@ look_for_station(C, Stations) ->
                     S([_|T], Cor) -> S(T,Cor);
                     S([], _) -> "" end,
   Which_station(Stations, C).
+
 
 create_monitor() ->
   #{stations => [], measurements => []}.
@@ -54,8 +55,8 @@ add_value(S_name, Date, Type, Value, Monitor) ->
   Stations = maps:get(stations, Monitor),
 
   Same_values = fun
-                  ({_,N, _}, N) -> false;
-                  (_, _) -> true
+                  (#station{name = N}, N) -> true;
+                  (_, _) -> false
                 end,
   Bool_duplicates_s = [Same_values(X, S_name) || X <- Stations],
   Station_exist = lists:any(fun(C) -> C end, Bool_duplicates_s),
@@ -66,13 +67,17 @@ add_value(S_name, Date, Type, Value, Monitor) ->
   Bool_duplicates_m = [Same_measurements(X, S_name, Date, Type) || X <- Measurements],
   Measurement_exist = lists:any(fun(C) -> C end, Bool_duplicates_m),
   Result = fun
-             (false, false) ->
+             (true, false) ->
                New_measurement = #measurement{station_name = S_name, time = Date, type = Type, result = Value},
                New_measurements = [New_measurement | Measurements],
                NewMonitor = Monitor#{measurements => New_measurements},
                NewMonitor;
-             (_,_) ->
-               {error, "You cannot add this measurements due to duplicates or not-existing station"}
+             (false,false) ->
+               {error, "That station do not exist"};
+             (true,true) ->
+               {error, "You cannot add this measurements due to duplicates"};
+             (false,true) ->
+               {error, "duplicates and not exisiting station"}
            end,
   Result(Station_exist, Measurement_exist).
 
@@ -110,9 +115,48 @@ get_one_value(Name, Date, Type, Monitor) ->
   Result = fun
              (M, M) ->
                {error, "Nothing to get"};
-             (_,[N]) ->
-               N end,
+             (_,[#measurement{result = R}]) ->
+               R end,
   Result([], NewMeasurements).
+
+get_station_mean({V1,V2}, Type, Monitor) ->
+  Stations = maps:get(stations, Monitor),
+  Station_name = look_for_station({V1,V2}, Stations),
+  get_station_mean(Station_name, Type, Monitor);
+get_station_mean(Name,  Type, Monitor) ->
+  Measurements = maps:get(measurements, Monitor),
+  Look_for_Measurement = fun
+                           (#measurement{station_name = N, type = T}, N, T) -> true;
+                           (_,_,_) -> false end,
+  Value = fun
+            (#measurement{result=V}) -> V;
+            (_) -> 0 end,
+  NewMeasurements = [Value(X) || X<-Measurements, Look_for_Measurement(X, Name, Type)],
+  Sum = lists:foldl(fun (X,Y) -> X+Y end, 0, NewMeasurements),
+  Result = fun
+             (0, 0) ->
+               {error, "No data"};
+             (L,S) ->
+               S / L end,
+  Result(length(NewMeasurements), Sum).
+
+
+get_daily_mean(Type, Date, Monitor) ->
+  Measurements = maps:get(measurements, Monitor),
+  Look_for_Measurement = fun
+                           (#measurement{time = {D,_}, type = T}, D, T) -> true;
+                           (_,_, _) -> false end,
+  Value = fun
+            (#measurement{result=V}) -> V;
+            (_) -> 0 end,
+  NewMeasurements = [Value(X) ||  X<-Measurements, Look_for_Measurement(X, Date, Type)],
+  Sum = lists:foldl(fun (X,Y) -> X+Y end, 0, NewMeasurements),
+  Result1 = fun
+             (0, 0) ->
+               {error, "No data"};
+             (L,S) ->
+               S / L end,
+  Result1(length(NewMeasurements), Sum).
 
 
 
