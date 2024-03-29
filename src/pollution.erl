@@ -9,10 +9,17 @@
 -module(pollution).
 -author("michalinahytrek").
 
--export([create_monitor/0, add_station/3, add_value/5, remove_value/4]).
+-export([create_monitor/0, add_station/3, add_value/5, remove_value/4, look_for_station/2, get_one_value/4]).
 
 -record(station, {name, coordinates}).
 -record(measurement, {station_name, time, type, result}).
+
+look_for_station(C, Stations) ->
+  Which_station = fun
+                    S([#station{coordinates = Cor, name = Name}|_], Cor) -> Name;
+                    S([_|T], Cor) -> S(T,Cor);
+                    S([], _) -> "" end,
+  Which_station(Stations, C).
 
 create_monitor() ->
   #{stations => [], measurements => []}.
@@ -40,11 +47,7 @@ add_station(Name, Coordinates, Monitor) ->
 
 add_value({V1,V2}, Date, Type, Value, Monitor) ->
   Stations = maps:get(stations, Monitor),
-  Which_station = fun
-                    S([#station{coordinates = {V11,V22}, name = Name}|_], {V11, V22}) -> Name;
-                    S([_|T], C) -> S(T,C);
-                    S([], _) -> "" end,
-  Station_name = Which_station(Stations, {V1,V2}),
+  Station_name = look_for_station({V1,V2}, Stations),
   add_value(Station_name,Date, Type, Value, Monitor);
 add_value(S_name, Date, Type, Value, Monitor) ->
   Measurements = maps:get(measurements, Monitor),
@@ -73,13 +76,11 @@ add_value(S_name, Date, Type, Value, Monitor) ->
            end,
   Result(Station_exist, Measurement_exist).
 
+
+
 remove_value({V1,V2},Date, Type, Monitor) ->
   Stations = maps:get(stations, Monitor),
-  Which_station = fun
-                    S([#station{coordinates = {V11,V22}, name = Name}|_], {V11, V22}) -> Name;
-                    S([_|T], C) -> S(T,C);
-                    S([], _) -> "" end,
-  Station_name = Which_station(Stations, {V1,V2}),
+  Station_name = look_for_station({V1,V2}, Stations),
   remove_value(Station_name,Date, Type, Monitor);
 remove_value(Name, Date, Type, Monitor) ->
   Measurements = maps:get(measurements, Monitor),
@@ -94,6 +95,25 @@ remove_value(Name, Date, Type, Monitor) ->
                NewMonitor = Monitor#{measurements => NewMeasurements},
                NewMonitor end,
   Result(Measurements, NewMeasurements).
+
+
+get_one_value({V1,V2}, Date, Type, Monitor) ->
+  Stations = maps:get(stations, Monitor),
+  Station_name = look_for_station({V1,V2}, Stations),
+  get_one_value(Station_name, Date, Type, Monitor);
+get_one_value(Name, Date, Type, Monitor) ->
+  Measurements = maps:get(measurements, Monitor),
+  Look_for_Measurement = fun
+                           (#measurement{station_name = N, time = D, type = T}, N, D, T) -> true;
+                           (_,_,_,_) -> false end,
+  NewMeasurements = [X || X<-Measurements, Look_for_Measurement(X, Name, Date, Type)],
+  Result = fun
+             (M, M) ->
+               {error, "Nothing to get"};
+             (_,[N]) ->
+               N end,
+  Result([], NewMeasurements).
+
 
 
 
