@@ -9,7 +9,7 @@
 -module(pollution).
 -author("michalinahytrek").
 
--export([create_monitor/0, add_station/3, add_value/5, remove_value/4, look_for_station/2, get_one_value/4, get_station_mean/3, get_daily_mean/3]).
+-export([create_monitor/0, add_station/3, add_value/5, remove_value/4, look_for_station/2, get_one_value/4, get_station_mean/3, get_daily_mean/3, get_location_value/3]).
 
 -record(station, {name, coordinates}).
 -record(measurement, {station_name, time, type, result}).
@@ -159,9 +159,9 @@ get_daily_mean(Type, Date, Monitor) ->
   Result1(length(NewMeasurements), Sum).
 
 
-get_location_value(Location, Monitor) ->
+get_location_value(Location, Type, Monitor) ->
   Stations = maps:get(stations, Monitor),
-  Distance = fun (#station{coordinates = {V1,V2}}, {L1,L2}) -> (V1-L1)*(V1-L1) + (V2-L2)(V2-L2) end,
+  Distance = fun (#station{coordinates = {V1,V2}}, {L1,L2}) -> (V1-L1)*(V1-L1) + (V2-L2)*(V2-L2) end,
   Stations_Distances = [Distance(X, Location) || X<-Stations],
   [A,B,C | _] = lists:sort(Stations_Distances),
 
@@ -171,14 +171,23 @@ get_location_value(Location, Monitor) ->
 
   Measurements = maps:get(measurements, Monitor),
   Look_for_Measurement = fun
-                           (#measurement{station_name = N}, #station{name = N}) -> true;
+                           (#measurement{station_name = N, type = T}, #station{name = N}, T) -> true;
                            (_,_, _) -> false end,
-  S1_measurements = [X || X<-Measurements, Look_for_Measurement(X, S1)],
-  S2_measurements = [X || X<-Measurements, Look_for_Measurement(X, S2)],
-  S3_measurements = [X || X<-Measurements, Look_for_Measurement(X, S3)],
+  S1_measurements = [X || X<-Measurements, Look_for_Measurement(X, S1,Type)],
+  S2_measurements = [X || X<-Measurements, Look_for_Measurement(X, S2, Type)],
+  S3_measurements = [X || X<-Measurements, Look_for_Measurement(X, S3, Type)],
 
-  S1_sorted = lists:foldl(fun (X,[H|T]) when X < H -> [X,H|T]; (X,[H|T]) -> [[H,X,T]] end, [], S1_measurements),
-
+  Most_recent = fun(X,Y) ->
+    {_,_,D1,_,_} = X,
+    {_,_,D2,_,_} = Y,
+    D1 > D2 end,
+  S1_sorted = lists:sort(Most_recent, S1_measurements),
+  [#measurement{result = R1} | _] = S1_sorted,
+  S2_sorted = lists:sort(Most_recent, S2_measurements),
+  [#measurement{result = R2} | _] = S2_sorted,
+  S3_sorted = lists:sort(Most_recent, S3_measurements),
+  [#measurement{result = R3} | _] = S3_sorted,
+  round((R1*A + R2*B + R3*C)/(A+B+C)).
 
 
 
