@@ -159,6 +159,30 @@ get_daily_mean(Type, Date, Monitor) ->
   Result1(length(NewMeasurements), Sum).
 
 
+get_location_value(Location, Monitor) ->
+  Stations = maps:get(stations, Monitor),
+  Distance = fun (#station{coordinates = {V1,V2}}, {L1,L2}) -> (V1-L1)*(V1-L1) + (V2-L2)(V2-L2) end,
+  Stations_Distances = [Distance(X, Location) || X<-Stations],
+  [A,B,C | _] = lists:sort(Stations_Distances),
+
+  Closest = fun (A1, A1, _,_) -> true; (B1, _, B1, _) -> true; (C1, _, _, C1) -> true; (_,_,_,_) -> false end,
+  Stations_closest = [X || X<- Stations, Closest(Distance(X,Location),A,B,C)],
+  [S1,S2,S3] = Stations_closest,
+
+  Measurements = maps:get(measurements, Monitor),
+  Look_for_Measurement = fun
+                           (#measurement{station_name = N}, #station{name = N}) -> true;
+                           (_,_, _) -> false end,
+  S1_measurements = [X || X<-Measurements, Look_for_Measurement(X, S1)],
+  S2_measurements = [X || X<-Measurements, Look_for_Measurement(X, S2)],
+  S3_measurements = [X || X<-Measurements, Look_for_Measurement(X, S3)],
+
+  S1_sorted = lists:foldl(fun (X,[H|T]) when X < H -> [X,H|T]; (X,[H|T]) -> [[H,X,T]] end, [], S1_measurements),
+
+
+
+
+
 
 
 
